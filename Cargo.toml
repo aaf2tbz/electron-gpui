@@ -1,0 +1,33 @@
+[package]
+name = "electron-gpui"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "An Electron-style starter for native desktop apps built on GPUI"
+publish = false
+
+[[bin]]
+name = "electron-gpui"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1"
+# GPUI is pinned exactly: its API still changes between releases.
+gpui = { version = "=0.2.2", features = ["runtime_shaders"] }
+unicode-segmentation = "1"
+pulldown-cmark = { version = "0.13", default-features = false }
+libc = "0.2"
+
+[dev-dependencies]
+gpui = { version = "=0.2.2", features = ["test-support"] }
+
+[profile.release]
+codegen-units = 1
+lto = "thin"
+
+# grid 0.18.0 (via gpui 0.2.2 -> taffy =0.9.0, which needs grid ^0.18) is
+# affected by GHSA-38c5-483c-4qqp; the fix shipped only in grid 1.0.1. The
+# vendored copy backports that fix (becheran/grid be213bd3). Drop this patch
+# once GPUI moves to a taffy that uses grid >= 1.0.1.
+[patch.crates-io]
+grid = { path = "vendor/grid" }

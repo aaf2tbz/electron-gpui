@@ -1,0 +1,22 @@
+electron-gpui is MIT licensed (see LICENSE), except for the parts below, which
+keep their own licenses. Keep this file, and the files in licenses/, in any app
+you build from the template that still contains them.
+
+src/components/text_input.rs
+  Adapted from GPUI 0.2.2 examples/input.rs.
+  Copyright 2022 - 2025 Zed Industries, Inc.
+  Apache License 2.0, see licenses/GPUI-APACHE-2.0.txt.
+  Changes: Unicode-aware selection, secret (password) mode, IME masking,
+  horizontal scrolling, themeable colors.
+
+assets/fonts/RethinkSans-*.ttf
+  Copyright 2022 The Rethink Sans Project Authors
+  (https://github.com/hans-thiessen/Rethink-Sans)
+  SIL Open Font License 1.1, see licenses/RethinkSans-OFL.txt.
+
+vendor/grid
+  grid 0.18.0 by Armin Becher, with a backported security fix.
+  MIT License, see vendor/grid/LICENSE.
+
+GPUI itself (a crates.io dependency, not vendored) is Apache-2.0,
+Copyright Zed Industries, Inc.
