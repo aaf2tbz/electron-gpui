@@ -13,12 +13,12 @@ jobs:
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo test --locked
       - run: scripts/package.sh --dmg
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: macos-dmg
           path: target/release/*.dmg
@@ -26,7 +26,7 @@ jobs:
   linux:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Install GPUI's build dependencies
         run: |
           sudo apt-get update
@@ -56,7 +56,7 @@ jobs:
             wait $PID || true
             cat app.log
           ' "$BIN"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         if: always()
         with:
           name: linux

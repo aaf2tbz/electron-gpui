@@ -16,7 +16,10 @@ anyhow = "1"
 gpui = { version = "=0.2.2", features = ["runtime_shaders"] }
 unicode-segmentation = "1"
 pulldown-cmark = { version = "0.13", default-features = false }
-libc = "0.2"
+# libc 0.2.190 removed ENOATTR on Linux, which breaks xattr 0.2.3 (via gpui ->
+# gpui_http_client -> zed-async-tar, which needs xattr ^0.2). Lift the cap once
+# GPUI moves off xattr 0.2.
+libc = ">=0.2.150, <0.2.190"
 
 [dev-dependencies]
 gpui = { version = "=0.2.2", features = ["test-support"] }
