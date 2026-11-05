@@ -37,6 +37,7 @@ actions!(
 const SHOW_APP_HOTKEY: u32 = 1;
 
 fn main() -> Result<()> {
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("warn")).init();
     lifecycle::install_signal_handlers()?;
 
     Application::new().with_assets(assets::Assets).run(|cx: &mut App| {
@@ -133,7 +134,7 @@ fn install_global_services(cx: &mut App) {
             SHOW_APP_HOTKEY,
         );
         if let Err(error) = hotkey {
-            eprintln!("{error}");
+            log::warn!("{error}");
         }
     }
 

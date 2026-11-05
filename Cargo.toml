@@ -12,6 +12,9 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = "1"
+# Logging, like Electron's console: RUST_LOG=info cargo run (default: warn).
+env_logger = { version = "0.11", default-features = false, features = ["auto-color", "humantime"] }
+log = "0.4"
 # GPUI is pinned exactly: its API still changes between releases.
 gpui = { version = "=0.2.2", features = ["runtime_shaders"] }
 unicode-segmentation = "1"
