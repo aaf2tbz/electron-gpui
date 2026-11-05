@@ -1,12 +1,13 @@
 # electron-gpui
 
-An Electron-style starter for native macOS desktop apps, built on
+An Electron-style starter for native desktop apps on macOS and Linux, built on
 [GPUI](https://www.gpui.rs), the GPU-accelerated Rust UI framework behind the
 Zed editor.
 
 You get what an Electron starter gives you (a window, a menu bar, an app
 lifecycle, some UI components and a packaging script), without a browser engine
-inside. The app is one native binary, rendered with Metal, that starts in a
+inside. The app is one native binary, rendered on the GPU (Metal on macOS,
+Vulkan on Linux), that starts in a
 fraction of a second and uses tens of megabytes of memory, not hundreds.
 
 The scaffolding comes from the desktop app of
@@ -18,16 +19,17 @@ to GPUI, with everything MetalSharp-specific taken out.
 | Electron | Here |
 |---|---|
 | `main.js` (main process) | `src/main.rs`: fonts, key bindings, menu bar, global services, first window |
+| Frameless window chrome | `src/components/window_frame.rs`: title bar and resize edges, only where the desktop doesn't draw them |
 | `BrowserWindow` | `open_main_window` in `src/main.rs` (`cx.open_window`) |
 | Renderer / your UI | `src/app.rs`: a sidebar shell with example pages |
 | `Menu.setApplicationMenu` | `install_menus` in `src/main.rs` (`cx.set_menus`) |
-| `globalShortcut` | `src/platform/hotkeys.rs` (system-wide, needs no Accessibility permission) |
+| `globalShortcut` | `src/platform/hotkeys.rs` (macOS: system-wide, needs no Accessibility permission) |
 | `app.on('before-quit')` from signals | `src/platform/lifecycle.rs` (SIGTERM/SIGINT quit cleanly on the main thread) |
 | `window-all-closed` → quit | `cx.on_window_closed` in `src/main.rs` |
 | `dialog.showMessageBox` | `window.prompt(...)`, see the About action |
 | `shell.openExternal` | `cx.open_url(...)`, used by markdown links |
 | CSS variables / theme | `src/theme.rs`: a dark and a light theme as a GPUI global |
-| electron-builder | `scripts/package.sh`: `.app` bundle, icon, code signing, `.dmg` |
+| electron-builder | `scripts/package.sh`: macOS `.app`, icon, code signing, `.dmg`<br>`scripts/package-linux.sh`: Linux tarball with a `.desktop` entry, icon and installer |
 
 Components in `src/components/`, each a standalone file:
 
@@ -40,15 +42,37 @@ Components in `src/components/`, each a standalone file:
 
 The example app has four pages that use all of the above. Try **⌘N** (new
 window), **⌘⇧T** (light/dark), **⌘⇧K** from any app (global shortcut), and
-**About** in the app menu.
+**About** in the app menu. On Linux the shortcuts are **Ctrl+N**, **Ctrl+Shift+T**
+and **Ctrl+Q**.
 
 ## Requirements
 
-- macOS 13 or later (GPUI's macOS backend; Linux and Windows support in GPUI is
-  still early, and this template is only tested on macOS)
-- Rust 1.88 or later (edition 2024): `rustup update stable`
-- Xcode Command Line Tools (`xcode-select --install`) for the linker,
-  `codesign`, `sips` and `iconutil`. Full Xcode isn't needed.
+Rust 1.88 or later (edition 2024) on either platform: `rustup update stable`.
+
+**macOS** 13 or later, with the Xcode Command Line Tools (`xcode-select
+--install`) for the linker, `codesign`, `sips` and `iconutil`. Full Xcode isn't
+needed.
+
+**Linux** with X11 or Wayland and a Vulkan driver (Mesa's is fine), plus GPUI's
+build dependencies:
+
+```bash
+# Debian, Ubuntu
+sudo apt install build-essential pkg-config libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev libfontconfig-dev libfreetype-dev libvulkan1 mesa-vulkan-drivers
+```
+
+```bash
+# Fedora
+sudo dnf install gcc gcc-c++ pkgconf libxkbcommon-x11-devel wayland-devel libxcb-devel fontconfig-devel freetype-devel vulkan-loader mesa-vulkan-drivers
+```
+
+```bash
+# Arch
+sudo pacman -S base-devel libxkbcommon-x11 wayland libxcb fontconfig freetype2 vulkan-icd-loader
+```
+
+Windows isn't supported yet: GPUI's Windows backend is still early, and the
+template's platform code hasn't been ported.
 
 ## Build and run
 
@@ -60,6 +84,8 @@ The first build compiles GPUI and takes a few minutes; after that, rebuilds take
 seconds. `cargo test` runs the component tests.
 
 ## Package
+
+### macOS
 
 ```bash
 scripts/package.sh
@@ -92,12 +118,27 @@ xcrun notarytool submit "target/release/My App-0.1.0.dmg" --keychain-profile <pr
 xcrun stapler staple "target/release/My App-0.1.0.dmg"
 ```
 
+### Linux
+
+```bash
+scripts/package-linux.sh
+```
+
+That writes `target/release/electron-gpui-<version>-linux-<arch>.tar.gz` with
+the binary, a `.desktop` entry, an icon and an `install.sh`. Users unpack it and
+run `./install.sh` to install into `~/.local`, or `sudo PREFIX=/usr/local
+./install.sh` to install for everyone. It takes the same `APP_NAME` / `APP_ID`
+settings as the macOS script; `APP_ID` must match `APP_ID` in `src/main.rs`,
+which is how the desktop matches the window to its icon. For AppImage, Flatpak
+or distro packages, start from this layout.
+
 ## Start your own app
 
 1. Copy the template: `git clone <this repo> my-app && cd my-app && rm -rf .git && git init`.
-2. Rename it: `name` in `Cargo.toml` (that's the binary name), `APP_NAME` in
-   `src/main.rs`, and the `APP_NAME` / `APP_BUNDLE_ID` defaults in
-   `scripts/package.sh`.
+2. Rename it: `name` in `Cargo.toml` (that's the binary name), `APP_NAME` and
+   `APP_ID` in `src/main.rs`, the `APP_NAME` / `APP_BUNDLE_ID` defaults in
+   `scripts/package.sh`, and the `APP_NAME` / `APP_ID` defaults in
+   `scripts/package-linux.sh`.
 3. Replace `assets/AppIcon.png` with your own 1024×1024 icon. (`swift
    scripts/generate-icon.swift` redraws the placeholder.)
 4. Put your UI in `src/app.rs`. Each page is a method returning an element;
@@ -126,6 +167,30 @@ Some GPUI pointers:
 
 GPUI is pinned to an exact version (`=0.2.2`) because its API still changes
 between releases. Upgrade on purpose, and expect small fixes when you do.
+
+## Platform differences
+
+GPUI covers the window, rendering, input, fonts, clipboard and dialogs on both
+platforms. Where Linux differs:
+
+- **Menu bar.** Linux has no global menu bar, so the `cx.set_menus` menus don't
+  show. Their key bindings still work, and put anything else (like About) in
+  your UI, as the example's Settings page does.
+- **Title bar.** X11 window managers and most Wayland compositors (KDE, Sway)
+  draw it. GNOME on Wayland doesn't, so `window_frame.rs` draws one with
+  minimize, maximize and close buttons, dragging, and resize edges. Check
+  `window.window_decorations()` if you want to style it yourself.
+- **Global shortcuts** are macOS-only (`hotkeys::SUPPORTED` is false on Linux).
+  Wayland gives apps no way to grab keys system-wide except the desktop portal's
+  GlobalShortcuts interface, which not every desktop has.
+- **`cx.activate`, `cx.hide`** and friends do nothing on Linux.
+- **Shortcuts** use GPUI's `secondary` modifier, which is Command on macOS and
+  Ctrl on Linux. Write `secondary-s`, not `cmd-s`, for bindings that should work
+  on both.
+
+CI (`.github/workflows/ci.yml`) builds, tests and packages on both platforms,
+and launches the Linux build under Xvfb with Mesa's software Vulkan driver,
+keeping a screenshot as an artifact.
 
 ## Notes
 

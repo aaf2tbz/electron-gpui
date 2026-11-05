@@ -1,0 +1,66 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked
+      - run: scripts/package.sh --dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: target/release/*.dmg
+
+  linux:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GPUI's build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config \
+            libxkbcommon-x11-dev libwayland-dev libx11-xcb-dev libxcb1-dev \
+            libfontconfig-dev libfreetype-dev libvulkan1 \
+            mesa-vulkan-drivers xvfb imagemagick
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test --locked
+      - run: scripts/package-linux.sh
+      # Runs the packaged binary on a virtual X11 display with Mesa's software
+      # Vulkan driver (lavapipe), fails if it exits early, and keeps a screenshot.
+      - name: Launch under Xvfb
+        run: |
+          tar -xzf target/release/*-linux-*.tar.gz -C "$RUNNER_TEMP"
+          BIN="$(ls "$RUNNER_TEMP"/*/bin/electron-gpui)"
+          xvfb-run -a -s "-screen 0 1280x800x24" bash -c '
+            "$0" > app.log 2>&1 &
+            PID=$!
+            sleep 15
+            import -window root screenshot.png
+            if ! kill -0 $PID 2>/dev/null; then
+              echo "The app exited early:"; cat app.log; exit 1
+            fi
+            kill -TERM $PID
+            wait $PID || true
+            cat app.log
+          ' "$BIN"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux
+          path: |
+            screenshot.png
+            app.log
+            target/release/*.tar.gz

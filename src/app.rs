@@ -7,7 +7,7 @@ use gpui::{
 };
 use std::time::Duration;
 
-use crate::components::{markdown, text_input::TextInput, toast};
+use crate::components::{markdown, text_input::TextInput, toast, window_frame};
 use crate::theme::Theme;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -39,6 +39,16 @@ impl Page {
         }
     }
 }
+
+/// How the `secondary` modifier reads on this platform, for shortcut labels.
+#[cfg(target_os = "macos")]
+const MOD: &str = "⌘";
+#[cfg(not(target_os = "macos"))]
+const MOD: &str = "Ctrl+";
+#[cfg(target_os = "macos")]
+const SHIFT: &str = "⇧";
+#[cfg(not(target_os = "macos"))]
+const SHIFT: &str = "Shift+";
 
 const SAMPLE_MARKDOWN: &str = "\
 # Markdown, natively
@@ -180,7 +190,7 @@ impl Shell {
             .child(Self::header(
                 theme,
                 "Welcome",
-                "A native window, a menu bar, and GPU-rendered UI. No browser engine inside.",
+                "A native window, app shortcuts, and GPU-rendered UI. No browser engine inside.",
             ))
             .child(
                 theme
@@ -212,9 +222,24 @@ impl Shell {
             .child(
                 theme
                     .card("Things to try")
-                    .child(bullet(theme, "⌘N opens another window; ⌘⇧T switches light and dark."))
-                    .child(bullet(theme, "⌘⇧K brings the app to the front from anywhere (a global shortcut)."))
-                    .child(bullet(theme, "Pick \"About\" in the app menu for a native dialog.")),
+                    .child(bullet(
+                        theme,
+                        &format!("{MOD}N opens another window; {MOD}{SHIFT}T switches light and dark."),
+                    ))
+                    .when(crate::platform::hotkeys::SUPPORTED, |card| {
+                        card.child(bullet(
+                            theme,
+                            "⌘⇧K brings the app to the front from anywhere (a global shortcut).",
+                        ))
+                    })
+                    .child(bullet(
+                        theme,
+                        if cfg!(target_os = "macos") {
+                            "Pick \"About\" in the app menu for a native dialog."
+                        } else {
+                            "Settings has an About button that opens a dialog."
+                        },
+                    )),
             )
             .into_any_element()
     }
@@ -326,14 +351,18 @@ impl Shell {
                 theme
                     .card("About")
                     .child(bullet(theme, &format!("Version {}", env!("CARGO_PKG_VERSION"))))
-                    .child(bullet(theme, "Built with GPUI, the UI framework from the Zed editor.")),
+                    .child(bullet(theme, "Built with GPUI, the UI framework from the Zed editor."))
+                    .child(div().flex().child(theme.button("about", "About this app", false).on_click(
+                        // The same action as the macOS app menu's About item.
+                        |_, window, cx| window.dispatch_action(Box::new(crate::About), cx),
+                    ))),
             )
             .into_any_element()
     }
 }
 
 impl Render for Shell {
-    fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let theme = *cx.global::<Theme>();
         for input in [&self.name, &self.password] {
             input.update(cx, |input, _| {
@@ -347,13 +376,9 @@ impl Render for Shell {
             Page::Markdown => self.markdown(theme),
             Page::Settings => self.settings(theme),
         };
-        div()
-            .relative()
+        let body = div()
             .size_full()
             .flex()
-            .font_family("Rethink Sans")
-            .bg(rgb(theme.background))
-            .text_color(rgb(theme.text))
             .child(self.sidebar(theme, cx))
             .child(
                 div()
@@ -363,7 +388,16 @@ impl Render for Shell {
                     .h_full()
                     .overflow_y_scroll()
                     .child(div().max_w(px(760.0)).p(px(32.0)).child(page)),
-            )
+            );
+        div()
+            .relative()
+            .size_full()
+            .font_family("Rethink Sans")
+            .bg(rgb(theme.background))
+            .text_color(rgb(theme.text))
+            // Adds a title bar and resize edges where the compositor doesn't
+            // draw them (GNOME on Wayland); elsewhere it's just `body`.
+            .child(window_frame::frame(window, theme, crate::APP_NAME, body))
             // Last child, so toasts overlay everything else.
             .children(toast::hub(cx))
     }

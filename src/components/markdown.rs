@@ -10,6 +10,11 @@ use gpui::{
 };
 use pulldown_cmark::{Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
+#[cfg(target_os = "macos")]
+const MONOSPACE: &str = "Menlo";
+#[cfg(not(target_os = "macos"))]
+const MONOSPACE: &str = "DejaVu Sans Mono";
+
 /// Colors the rendered markdown uses; build one from your theme.
 #[derive(Clone, Copy, Debug)]
 pub struct MarkdownColors {
@@ -417,7 +422,7 @@ pub fn render(id: &str, source: &str, colors: MarkdownColors) -> Vec<AnyElement>
                     .p(px(10.0))
                     .rounded(px(6.0))
                     .bg(rgba(colors.overlay))
-                    .font_family("Menlo")
+                    .font_family(MONOSPACE)
                     .text_size(px(12.0))
                     .line_height(px(17.0))
                     .text_color(rgb(colors.text))

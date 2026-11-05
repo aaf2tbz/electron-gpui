@@ -1,6 +1,9 @@
 //! Entry point: the "main process" of an Electron app. It registers fonts, key
 //! bindings and the menu bar, installs app-wide services, then opens the first
 //! window. The UI itself lives in `app.rs`.
+//!
+//! Runs on macOS and Linux (X11 and Wayland). Shortcuts use GPUI's `secondary`
+//! modifier: Command on macOS, Ctrl on Linux.
 mod app;
 mod assets;
 mod components;
@@ -10,7 +13,7 @@ mod theme;
 use anyhow::Result;
 use gpui::{
     App, AppContext, Application, Bounds, KeyBinding, Menu, MenuItem, PromptLevel, SystemMenuType,
-    TitlebarOptions, WindowBounds, WindowOptions, actions, point, px, size,
+    TitlebarOptions, WindowBounds, WindowDecorations, WindowOptions, actions, point, px, size,
 };
 use std::borrow::Cow;
 use std::time::Duration;
@@ -21,6 +24,9 @@ use crate::theme::Theme;
 
 /// Shown in the menu bar, window titles and the About box.
 pub const APP_NAME: &str = "Electron GPUI";
+/// Reverse-DNS id. On Linux it is the Wayland app id / X11 WM_CLASS, and must
+/// match the `.desktop` file name for the desktop to show the right icon.
+pub const APP_ID: &str = "dev.example.electron-gpui";
 
 actions!(
     electron_gpui,
@@ -53,11 +59,14 @@ fn main() -> Result<()> {
 
 fn install_menus(cx: &mut App) {
     cx.bind_keys([
-        KeyBinding::new("cmd-q", Quit, None),
+        KeyBinding::new("secondary-q", Quit, None),
+        KeyBinding::new("secondary-n", NewWindow, None),
+        KeyBinding::new("secondary-shift-t", ToggleTheme, None),
+    ]);
+    #[cfg(target_os = "macos")]
+    cx.bind_keys([
         KeyBinding::new("cmd-h", Hide, None),
         KeyBinding::new("alt-cmd-h", HideOthers, None),
-        KeyBinding::new("cmd-n", NewWindow, None),
-        KeyBinding::new("cmd-shift-t", ToggleTheme, None),
     ]);
 
     cx.on_action(|_: &Quit, cx| cx.quit());
@@ -83,7 +92,10 @@ fn install_menus(cx: &mut App) {
         });
     });
 
-    // On macOS the first menu is always the application menu.
+    // On macOS the first menu is always the application menu. Linux has no
+    // global menu bar, so GPUI keeps these but doesn't show them: the key
+    // bindings above still work, and the example app puts About on its
+    // Settings page.
     cx.set_menus(vec![
         Menu {
             name: APP_NAME.into(),
@@ -110,16 +122,19 @@ fn install_menus(cx: &mut App) {
     ]);
 }
 
-/// App-wide background work: a system-wide shortcut and graceful quit on
-/// SIGTERM/SIGINT. Both are flags set off the main thread and polled here.
+/// App-wide background work: a system-wide shortcut (macOS only, see
+/// `platform/hotkeys.rs`) and graceful quit on SIGTERM/SIGINT. Both are flags
+/// set off the main thread and polled here.
 fn install_global_services(cx: &mut App) {
-    let hotkey = hotkeys::register(
-        hotkeys::keys::K,
-        hotkeys::modifiers::CMD | hotkeys::modifiers::SHIFT,
-        SHOW_APP_HOTKEY,
-    );
-    if let Err(error) = hotkey {
-        eprintln!("{error}");
+    if hotkeys::SUPPORTED {
+        let hotkey = hotkeys::register(
+            hotkeys::keys::K,
+            hotkeys::modifiers::CMD | hotkeys::modifiers::SHIFT,
+            SHOW_APP_HOTKEY,
+        );
+        if let Err(error) = hotkey {
+            eprintln!("{error}");
+        }
     }
 
     cx.spawn(async move |cx| {
@@ -165,6 +180,11 @@ pub fn open_main_window(cx: &mut App) {
             title: Some(APP_NAME.into()),
             ..Default::default()
         }),
+        app_id: Some(APP_ID.into()),
+        // Ask Linux compositors for a title bar. Those that can't provide one
+        // (GNOME on Wayland) fall back to client-side decorations, and
+        // `components/window_frame.rs` then draws the title bar itself.
+        window_decorations: Some(WindowDecorations::Server),
         ..Default::default()
     };
     cx.open_window(options, |window, cx| cx.new(|cx| app::Shell::new(window, cx)))

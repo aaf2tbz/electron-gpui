@@ -3,14 +3,21 @@
 //! application event loop and need no Accessibility permission. The handler only
 //! sets a flag per shortcut; the UI polls `take` on a timer and acts on it.
 //!
+//! macOS only. On Linux, X11 could grab keys with `XGrabKey`, but Wayland has no
+//! app-side global shortcuts (only the xdg-desktop-portal GlobalShortcuts portal,
+//! which not every desktop implements), so `register` returns an error there.
+//!
 //! For shortcuts that only matter while your window is focused, use GPUI key
 //! bindings (`cx.bind_keys`) instead; see `main.rs`.
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Bit per registered shortcut id (0..64), set by the Carbon handler.
 static PRESSED: AtomicU64 = AtomicU64::new(0);
-static INSTALLED: Mutex<bool> = Mutex::new(false);
+#[cfg(target_os = "macos")]
+static INSTALLED: std::sync::Mutex<bool> = std::sync::Mutex::new(false);
+
+/// Whether `register` can work on this platform.
+pub const SUPPORTED: bool = cfg!(target_os = "macos");
 
 #[allow(dead_code)]
 pub mod modifiers {
@@ -164,6 +171,10 @@ pub fn register(key_code: u32, modifiers: u32, id: u32) -> anyhow::Result<()> {
         }
     }
     #[cfg(not(target_os = "macos"))]
-    let _ = (key_code, modifiers, id, &INSTALLED);
+    {
+        let _ = (key_code, modifiers, id);
+        anyhow::bail!("Global shortcuts are only implemented on macOS");
+    }
+    #[cfg(target_os = "macos")]
     Ok(())
 }
